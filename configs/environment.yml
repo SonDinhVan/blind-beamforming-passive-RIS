@@ -1,0 +1,15 @@
+name: rs_blind_beamforming
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - jupyter
+    - numpy
+    - scipy
+    - matplotlib
+    - cvxpy
+    - black
+    - flake8

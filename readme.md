@@ -12,4 +12,4 @@ To play around with the algorithm:
 To reproduce the simulation results:
 - Refer to `notebooks/simulation results/`.
 
-Copyright: © 2025 <Son Dinh-Van>. All rights reserved.
+Copyright: © 2025 Son Dinh-Van. All rights reserved.

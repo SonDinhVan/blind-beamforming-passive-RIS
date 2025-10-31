@@ -1,15 +1,30 @@
-Paper title: Near-optimal Reconfigurable Intelligent Surface Configuration: Blind Beamforming with Sensing.
+# Near-optimal Reconfigurable Intelligent Surface Configuration: Blind Beamforming with Sensing (BORN)
 
-Install:
-- From the repo root, run: `pip install -e.`
-- I recommend to install environment from `environment.yml` via:
-  - `conda env create -f environment.yml`
-  - `conda activate <env-name>`
+> Blind beamforming for RIS using only RSS, with a sensing-then-optimization pipeline that exploits the quadratic SNR structure in the binary setting.
 
-To play around with the algorithm:
-- Refer to `notebooks/analysis.ipynb`.
+<div align="center">
 
-To reproduce the simulation results:
-- Refer to `notebooks/simulation results/`.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](#)
+[![Conda env](https://img.shields.io/badge/conda-environment.yml-brightgreen.svg)](#)
+[![License](https://img.shields.io/badge/License-All%20rights%20reserved-lightgrey.svg)](#)
 
-Copyright: © 2025 Son Dinh-Van. All rights reserved.
+</div>
+
+---
+
+## Overview
+
+This repository accompanies the paper **“Near-optimal Reconfigurable Intelligent Surface Configuration: Blind Beamforming with Sensing.”**  
+It provides:
+- An implementation of **BORN**, a blind beamforming algorithm that uses only RSS measurements
+- Notebooks for analysis and simulation
+- Reproducible experiments for figures and tables in the paper
+
+---
+
+## Installation
+
+You can install in editable mode from the repository root.
+
+```bash
+pip install -e .

@@ -155,14 +155,16 @@ def CSM(X: np.array, y: np.array) -> np.array:
     
     return final_state
 
-def compute_V_and_s(M: np.array, w: np.array):
+def compute_V_and_s(M: np.array, w: np.array, r: int = 2):
     """
     Compute V and s for the quadratic form x^T M x + x^T w,
-    where M is positive semidefinite, using eigenvalue decomposition for efficiency and truncation.
+    where M is positive semidefinite, using eigenvalue decomposition for efficiency
+    and a user-specified rank.
     
     Parameters:
         M (np.ndarray): Positive semidefinite matrix (N x N).
         w (np.ndarray): Vector (N x 1 or 1D array).
+        r (int): Rank to keep in the factorization.
     
     Returns:
         V (np.ndarray): Matrix such that V.T @ V ≈ M (r x N, with r <= N).
@@ -171,13 +173,22 @@ def compute_V_and_s(M: np.array, w: np.array):
     # Ensure w is column vector
     w = w.flatten()[:, np.newaxis] if w.ndim == 1 else w
     
-    # Eigen decomposition
-    lamb, U = eigh(M)
-    lamb_pos = lamb[-2:]
-    U_pos = U[:, -2:]
+    N = M.shape[0]
+    if r <= 0:
+        raise ValueError("rank r must be a positive integer")
+    if r > N:
+        raise ValueError(f"rank r cannot exceed matrix dimension N={N}")
+    if w.ndim == 1:
+        w = w.reshape(-1, 1)
 
-    sqrt_lamb_pos = np.sqrt(lamb_pos)
-    V = np.diag(sqrt_lamb_pos) @ U_pos.T  # r x N
+    # Eigen decomposition (ascending order)
+    lamb, U = eigh(M)
+    idx = np.argsort(lamb)[::-1][:r]  # pick the top-r eigenvalues
+    lamb_r = lamb[idx]
+    U_r = U[:, idx]
+
+    sqrt_lamb_r = np.sqrt(np.maximum(lamb_r, 0.0))
+    V = np.diag(sqrt_lamb_r) @ U_r.T  # r x N
     
     # Pseudoinverse of V.T
     VT_pinv = pinv(V.T)
@@ -189,7 +200,8 @@ def compute_V_and_s(M: np.array, w: np.array):
 def solve_max_norm_squared_2d(V: np.array, s: np.array):
     """
     Exactly maximize ||V x + s||^2 over x in {-1,1}^N, assuming V is 2 x N and s is 2,.
-    
+    This solves the case rank = 2, single user.
+        
     Parameters:
         V (np.ndarray): 2 x N matrix.
         s (np.ndarray): 2-element array.
@@ -283,24 +295,188 @@ def solve_max_norm_squared_2d(V: np.array, s: np.array):
 
     return x_opt.reshape([-1, 1])
 
-def solve_our_optimization(M_true, w_true):
+def solve_max_norm_squared_alternating(
+    V: np.array,
+    s: np.array,
+    max_iter: int = 50,
+    return_history: bool = False,
+    random_init: bool = False,
+    init_from_rank2: bool = False,
+    x_init: np.array = None,
+    a_init: np.array = None,
+):
     """
-    Solve max x^T M_true x + x^T w_true over x in {-1,1}^N using the 2D sweep method.
-    Assumes the effective rank of M_true is 2 (as in IRS applications).
+    Approximate solve ||Vx + s|| over x in {-1,1}^N using alternating updates (Algorithm 3).
+
+    Parameters:
+        V (np.ndarray): r x N matrix.
+        s (np.ndarray): r-vector.
+        max_iter (int): Maximum number of alternating updates.
+        return_history (bool): If True, also returns per-iteration history.
+        random_init (bool): If True, initialize x from random {-1,+1} and derive
+            a from Vx+s.
+        init_from_rank2 (bool): If True, initialize using rank-2 solution.
+        x_init (np.ndarray): Optional initial x in {-1,1}^N.
+        a_init (np.ndarray): Optional initial dual vector on unit sphere.
+
+    Returns:
+        x_opt (np.ndarray): Heuristic solution x (N x 1).
+        history (dict): Optional, only returned when return_history=True.
+            Keys: "x", "a", "norm", "delta_x", "iterations".
+    """
+    V = np.asarray(V, dtype=float)
+    s = np.asarray(s, dtype=float).reshape(-1)
+    r, N = V.shape
+    rng = np.random.default_rng()
+
+    if x_init is not None:
+        x = np.asarray(x_init, dtype=float).reshape(-1)
+        if x.size != N:
+            raise ValueError(f"x_init has size {x.size}, expected {N}.")
+        x[x == 0] = 1.0
+        x = np.sign(x)
+        x[x == 0] = 1.0
+        v_plus_s = V @ x + s
+        v_norm = np.linalg.norm(v_plus_s)
+        if v_norm == 0:
+            a = None
+        else:
+            a = v_plus_s / v_norm
+    elif a_init is not None:
+        a = np.asarray(a_init, dtype=float).reshape(-1)
+        if a.size != r:
+            raise ValueError(f"a_init has size {a.size}, expected {r}.")
+    elif init_from_rank2:
+        if r < 2:
+            raise ValueError("init_from_rank2=True requires r >= 2.")
+        if s.size < 2:
+            raise ValueError("Cannot initialize from rank-2 when s has fewer than 2 entries.")
+        x_from_rank2 = solve_max_norm_squared_2d(V[:2], s[:2])
+        x = x_from_rank2.reshape(-1)
+        v_plus_s = V @ x + s
+        v_norm = np.linalg.norm(v_plus_s)
+        if v_norm == 0:
+            a = None
+        else:
+            a = v_plus_s / v_norm
+        x_init = x
+    elif random_init:
+        x = rng.choice([-1.0, 1.0], size=N)
+        v_plus_s = V @ x + s
+        v_norm = np.linalg.norm(v_plus_s)
+        if v_norm == 0:
+            a = None
+        else:
+            a = v_plus_s / v_norm
+    elif np.linalg.norm(s) > 0:
+        a = s / np.linalg.norm(s)
+    else:
+        a = None
+
+    if a is None:
+        a = rng.normal(size=r)
+        a_norm = np.linalg.norm(a)
+        if a_norm == 0:
+            a = np.ones(r) / np.sqrt(r)
+        else:
+            a = a / a_norm
+
+    a_norm = np.linalg.norm(a)
+    if a_norm == 0:
+        raise ValueError("Derived/initial a is zero; cannot normalize.")
+    a = a / a_norm
+
+    if x_init is None:
+        x = np.ones(N)
+
+    if return_history:
+        v_plus_s = V @ x + s
+        x_hist = [x.copy()]
+        a_hist = [a.copy()]
+        norm_hist = [float(np.linalg.norm(v_plus_s))]
+        delta_hist = []
+
+    for _ in range(max_iter):
+        va = V.T @ a
+        sa = float(np.dot(s, a))
+        x_new = np.sign(va * sa)
+        x_new[x_new == 0] = 1.0
+
+        delta = np.linalg.norm(x_new - x)
+        if return_history:
+            delta_hist.append(float(delta))
+
+        if np.array_equal(x_new, x):
+            x = x_new
+            if return_history:
+                v_plus_s = V @ x + s
+                v_norm = np.linalg.norm(v_plus_s)
+                x_hist.append(x.copy())
+                if v_norm > 0:
+                    a_hist.append((v_plus_s / v_norm).copy())
+                else:
+                    a_hist.append(a.copy())
+                norm_hist.append(float(v_norm))
+            break
+
+        x = x_new
+        v_plus_s = V @ x + s
+        v_norm = np.linalg.norm(v_plus_s)
+        if v_norm == 0:
+            if return_history:
+                x_hist.append(x.copy())
+                norm_hist.append(0.0)
+                a_hist.append(a.copy())
+            break
+        a = v_plus_s / v_norm
+
+        if return_history:
+            x_hist.append(x.copy())
+            a_hist.append(a.copy())
+            norm_hist.append(float(v_norm))
+
+    if return_history:
+        history = {
+            "x": np.asarray(x_hist),
+            "a": np.asarray(a_hist),
+            "norm": np.asarray(norm_hist),
+            "delta_x": np.asarray(delta_hist),
+            "iterations": int(len(delta_hist))
+        }
+        return x.reshape(-1, 1), history
+
+    return x.reshape(-1, 1)
+
+def solve_our_optimization(
+    M_true,
+    w_true,
+    r: int = 2,
+    init_from_rank2: bool = False,
+    random_init: bool = False,
+):
+    """
+    Solve max x^T M_true x + x^T w_true over x in {-1,1}^N.
+    Uses the exact 2D sweep for r=2 and alternating optimization for r>2.
     
     Parameters:
         M_true (np.ndarray): N x N PSD matrix.
         w_true (np.ndarray): N x 1 vector.
+        init_from_rank2 (bool): For r > 2, initialize alternating solver
+            from the rank-2 projected solution.
+        random_init (bool): For r > 2, initialize alternating solver with random x.
     
     Returns:
-        x_opt (np.ndarray): Optimal x.
-        opt_value (float): Optimal objective value.
+        x_opt (np.ndarray): Heuristic/optimal x.
     """
-    V, s = compute_V_and_s(M_true, w_true)
+    V, s = compute_V_and_s(M_true, w_true, r=r)
     
-    # Assume/check effective dimension is 2
     r = V.shape[0]
     if r != 2:
-        raise ValueError(f"Effective dimension is {r}, but the sweep method assumes 2D. Use a heuristic for higher dimensions.")
+        return solve_max_norm_squared_alternating(
+            V,
+            s,
+            init_from_rank2=init_from_rank2,
+            random_init=random_init,
+        )
     
     return solve_max_norm_squared_2d(V, s)

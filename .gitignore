@@ -2,3 +2,15 @@ notebooks/simulation results/.DS_Store
 notebooks/.DS_Store
 configs/.DS_Store
 .DS_Store
+rs_blind_beamforming.egg-info/dependency_links.txt
+rs_blind_beamforming.egg-info/PKG-INFO
+rs_blind_beamforming.egg-info/SOURCES.txt
+rs_blind_beamforming.egg-info/top_level.txt
+configs/__pycache__/__init__.cpython-310.pyc
+configs/__pycache__/config.cpython-310.pyc
+modules/__pycache__/__init__.cpython-310.pyc
+modules/__pycache__/node.cpython-310.pyc
+modules/__pycache__/optimization.cpython-310.pyc
+modules/__pycache__/sensing.cpython-310.pyc
+modules/__pycache__/system.cpython-310.pyc
+notebooks/simulation results/stage1_stage2_runtime_by_N.ipynb
